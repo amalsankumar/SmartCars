@@ -17,14 +17,14 @@ public class App implements Runnable {
     private volatile static boolean exit = false;
 
     double distanceCT(Vehicle car, RSU tower) {
-        int carX = car.getPosition().getX(), carY = car.getPosition().getY();
-        int towerX = tower.getPosition().getX(), towerY = tower.getPosition().getY();
+        float carX = car.getPosition().getX(), carY = car.getPosition().getY();
+        float towerX = tower.getPosition().getX(), towerY = tower.getPosition().getY();
         return Math.sqrt(Math.pow(carX - towerX, 2) + Math.pow(carY - towerY, 2));
     }
 
     double distanceCC(Vehicle car1, Vehicle car2) {
-        int car1X = car1.getPosition().getX(), car1Y = car1.getPosition().getY();
-        int car2X = car2.getPosition().getX(), car2Y = car2.getPosition().getY();
+        float car1X = car1.getPosition().getX(), car1Y = car1.getPosition().getY();
+        float car2X = car2.getPosition().getX(), car2Y = car2.getPosition().getY();
         return Math.sqrt(Math.pow(car1X - car2X, 2) + Math.pow(car1Y - car2Y, 2));
     }
 
@@ -76,6 +76,108 @@ public class App implements Runnable {
         return temp;
     }
 
+    void changeCarPosition() {
+        for(int i = 0; i < noOfCars; i++) {
+            Vehicle car = cars.get(i);
+            long currentTime = System.currentTimeMillis();
+            long changeTime = currentTime - car.getPositionSetTime();   // the time to calculate with
+            int id = car.getRoadId();
+            float distance = ((car.getSpeed())/3600) * currentTime;
+            if(id == 0) {
+                float newPosp = car.getPosition().getX() + distance;    //the distance the car is at when we want to update if in positive direction along its road
+                float newPosn = car.getPosition().getX() - distance;
+                if(car.getDirection() == -1) {
+                    if(newPosp >= 15000) {
+                        car.setPosition(new Position(15000, newPosp - 15000));
+                        car.setRoadId(1);
+                    }
+                    else {
+                        car.setPosition(new Position(newPosp, 0));
+                    }
+                }
+                else {
+                    if(newPosn < 0) {
+                        car.setPosition(new Position(0,  -newPosn));
+                        car.setRoadId(3);
+                    }
+                    else {
+                        car.setPosition(new Position(newPosn, 0));
+                    }
+                }
+            }
+
+            else if(id == 1) {
+                float newPosp = car.getPosition().getY() + distance;
+                float newPosn = car.getPosition().getY() - distance;
+                if(car.getDirection() == -1) {
+                    if(newPosp >= 5000) {
+                        car.setPosition(new Position(15000 - (newPosp - 5000), 5000));
+                        car.setRoadId(2);
+                    }
+                    else {
+                        car.setPosition((new Position(15000, newPosp)));
+                    }
+                }
+                else {
+                    if(newPosn < 0) {
+                        car.setPosition(new Position(15000 + newPosn, 0));
+                        car.setRoadId(0);
+                    }
+                    else {
+                        car.setPosition(new Position(150000, newPosn));
+                    }
+                }
+            }
+
+            else if(id == 2) {
+                float newPosp = car.getPosition().getX() + distance;
+                float newPosn = car.getPosition().getX() - distance;
+                if(car.getDirection() == -1) {
+                    if(newPosn < 0) {
+                        car.setPosition(new Position(0, 5000 + newPosn));
+                        car.setRoadId(3);
+                    }
+                    else {
+                        car.setPosition(new Position(newPosn, 5000));
+                    }
+                }
+                else {
+                    if(newPosp >= 15000) {
+                        car.setPosition(new Position(15000, 5000 - (newPosp - 15000)));
+                        car.setRoadId(1);
+                    }
+                    else {
+                        car.setPosition(new Position(newPosp, 5000));
+                    }
+                }
+            }
+
+            else if(id == 3) {
+                float newPosp = car.getPosition().getY() + distance;
+                float newPosn = car.getPosition().getY() - distance;
+                if(car.getDirection() == -1) {
+                    if(newPosn < 0) {
+                        car.setPosition(new Position(-newPosn, 0));
+                        car.setRoadId(0);
+                    }
+                    else {
+                        car.setPosition(new Position(newPosn, 0));
+                    }
+                }
+                else {
+                    if(newPosp >= 5000) {
+                        car.setPosition(new Position(newPosp - 5000, 5000));
+                        car.setRoadId(2);
+                    }
+                    else {
+                        car.setPosition(new Position(newPosp, 0));
+                    }
+                }
+            }
+
+        }
+    }
+
     public void run() {
         // 1. Select the car.
         // 2. Find the time to finish everything.
@@ -114,7 +216,7 @@ public class App implements Runnable {
                 Lock lock = car.getLock();
                 if (lock.tryLock()) {
                     try {
-                        if(distanceCT(car, tower) > 300) {
+                        if(distanceCT(car, tower) > 300) {       //If MultiHop
                             for (int i = 0; i < noOfCars; i++) {
                                 Vehicle candidate = cars.get(i);
                                 if (isWithinRangeCC(car, candidate)) {
@@ -139,7 +241,7 @@ public class App implements Runnable {
                                 }
                             }
                         }
-                        else {
+                        else {                                         //If no MultiHop
                             if (car.ifPacketQueueNotEmpty()) {
                                 Packet selectedPacket = car.getNextPacket();
                                 car.popPacket(car.getNextPacket());

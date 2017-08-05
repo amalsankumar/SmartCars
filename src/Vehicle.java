@@ -56,9 +56,15 @@ public class Vehicle {
         return position;
     }
 
+    public void setPosition(Position position) { this.position = position;}
+
     public int getRoadId() {
         return roadId;
     }
+
+    public void setRoadId(int roadId) { this.roadId = roadId; }
+
+    public long getPositionSetTime() { return positionSetTime ;}
 
     public Vehicle() {
         Random rand = new Random();
