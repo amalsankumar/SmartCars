@@ -66,6 +66,8 @@ public class Vehicle {
 
     public long getPositionSetTime() { return positionSetTime ;}
 
+    public Queue<Packet> getPacketQueue() { return packetIdQueue ;}
+
     public Vehicle() {
         Random rand = new Random();
         this.id = UUID.randomUUID().toString();

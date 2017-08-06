@@ -1,20 +1,25 @@
-import java.util.Arrays;
-import java.util.List;
-import java.util.ArrayList;
-import java.util.Random;
+import java.util.*;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
 public class App implements Runnable {
     
-    //When all to find the positions of the vehicles and update them ?
-    //Implement multi hop
-    //Implement the copy of packets in the neighbouring cars
+    //When all to find the positions of the vehicles and update them ? - DONE
+    //Change speed of carSystem.out.println(sumOfDelays/deliPackets);
+    //create random packets in cars at certain time
+    //Get all the time from the List and make the avg delay - DONE
+    //keep a count on the no of packets generated and delivered - DONE
+    //if packet time is beyond 150s , drop it
 
     private static List< RSU[] > towers = new ArrayList< RSU[]>();
     private static int noOfCars = 100;
     private static List<Vehicle> cars = new ArrayList<Vehicle>();
     private volatile static boolean exit = false;
+    private static List<Double> packetDelays = new ArrayList<Double>();
+    private static int genPackets;
+    private static int deliPackets;
+    private static int sumOfDelays;
+    private Lock carsLock = new ReentrantLock();
 
     double distanceCT(Vehicle car, RSU tower) {
         float carX = car.getPosition().getX(), carY = car.getPosition().getY();
@@ -80,7 +85,7 @@ public class App implements Runnable {
         for(int i = 0; i < noOfCars; i++) {
             Vehicle car = cars.get(i);
             long currentTime = System.currentTimeMillis();
-            long changeTime = currentTime - car.getPositionSetTime();   // the time to calculate with
+//            long changeTime = currentTime - car.getPositionSetTime();   // the time to calculate with
             int id = car.getRoadId();
             float distance = ((car.getSpeed())/3600) * currentTime;
             if(id == 0) {
@@ -189,8 +194,12 @@ public class App implements Runnable {
         RSU tower = towers.get(roadId)[towerId];
         List<Vehicle> carsWithinRange = new ArrayList<Vehicle>();
         List<Vehicle> broadcastCars = new ArrayList<Vehicle>();
-
         while(!exit) {
+            try {
+                changeCarPosition();
+            } catch(Exception ex) {
+                return;
+            }
             carsWithinRange.clear();
             for (int i = 0; i < noOfCars; i++) {
                 try {
@@ -216,7 +225,9 @@ public class App implements Runnable {
                 Lock lock = car.getLock();
                 if (lock.tryLock()) {
                     try {
-                        if(distanceCT(car, tower) > 300) {       //If MultiHop
+                        if(distanceCT(car, tower) > 300) {            //If MultiHop
+                            broadcastCars.clear();
+                            changeCarPosition();
                             for (int i = 0; i < noOfCars; i++) {
                                 Vehicle candidate = cars.get(i);
                                 if (isWithinRangeCC(car, candidate)) {
@@ -233,9 +244,9 @@ public class App implements Runnable {
                             if (car.ifPacketQueueNotEmpty()) {
                                 Packet selectedPacket = car.getNextPacket();
                                 car.popPacket(car.getNextPacket());
-                                selectedPacket.setSurvivalTime(1.33);
+                                selectedPacket.setTransTime(1.33);
                                 Packet copyPack = selectedPacket;
-                                for(int i = 0; i < broadcastCars.size(); i++) {
+                                for (int i = 0; i < broadcastCars.size(); i++) {
                                     Vehicle neighbor = broadcastCars.get(i);
                                     neighbor.pushPacket(copyPack);
                                 }
@@ -244,9 +255,27 @@ public class App implements Runnable {
                         else {                                         //If no MultiHop
                             if (car.ifPacketQueueNotEmpty()) {
                                 Packet selectedPacket = car.getNextPacket();
+//                                System.out.println(deliPackets);
+                                deliPackets++;
                                 car.popPacket(car.getNextPacket());
                                 long deathTime = System.currentTimeMillis();
-                                selectedPacket.setSurvivalTime((deathTime - selectedPacket.getpacketBirthTime()) + 1.33);
+                                selectedPacket.setTransTime((deathTime - selectedPacket.getpacketBirthTime()) + 2.66);
+                                packetDelays.add(selectedPacket.getTransTime());
+                                while(!carsLock.tryLock());
+                                try {
+                                    for (int j = 0; j < noOfCars; j++) {
+                                        Queue<Packet> packetQueue = cars.get(j).getPacketQueue();       //From here is the code to iterate a queue
+                                        for (Packet item : packetQueue) {
+                                            if (item.getId() == selectedPacket.getId()) {
+                                                //remove such packets
+                                                cars.get(j).popPacket(item);
+                                                break;
+                                            }
+                                        }
+                                    }
+                                } finally {
+                                    carsLock.unlock();
+                                }
                             }
                         }
 
@@ -311,10 +340,12 @@ public class App implements Runnable {
         }
 
         for(int k = 0; k < 5; k++, noOfCars += 100) {
-            cars.clear();
+            cars.clear(); sumOfDelays = 0; genPackets = 0; deliPackets = 0; packetDelays.clear();
             for(int i = 0; i < noOfCars; i++) {
                 cars.add(new Vehicle());
+                genPackets++;
             }
+            exit = false;
             for(Integer i = 0; i < 4; i++) {
                 for(Integer j = 0 ; j < towers.get(i).length ; j++) {
                     Thread t = (new Thread(new App()));
@@ -331,7 +362,12 @@ public class App implements Runnable {
             catch(InterruptedException e) {
 
             }
-
+            for(int i = 0; i < packetDelays.size(); i++) {
+                sumOfDelays += packetDelays.get(i);
+            }
+            System.out.println(sumOfDelays/deliPackets);
+            System.out.println(deliPackets);
+            System.out.println(genPackets);
         }
 
 
