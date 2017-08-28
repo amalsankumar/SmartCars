@@ -19,6 +19,7 @@ public class App implements Runnable {
     private static int genPackets;
     private static int deliPackets;
     private static int sumOfDelays;
+    private static double delayAvgArr[] = new double[1000];
     private Lock carsLock = new ReentrantLock();
 
     double distanceCT(Vehicle car, RSU tower) {
@@ -222,7 +223,7 @@ public class App implements Runnable {
                 Random rand = new Random();
                 int carId = rand.nextInt(totalCarsWithinRange);
                 Vehicle car = carsWithinRange.get(carId);
-                Lock lock = car.getLock();
+                Lock lock = car.getLock(); 
                 if (lock.tryLock()) {
                     try {
                         if(distanceCT(car, tower) > 300) {            //If MultiHop
@@ -340,14 +341,21 @@ public class App implements Runnable {
         }
 
         for(int k = 0; k < 5; k++, noOfCars += 100) {
-            cars.clear(); sumOfDelays = 0; genPackets = 0; deliPackets = 0; packetDelays.clear();
-            for(int i = 0; i < noOfCars; i++) {
+//            sumOfDelays = 0;
+//            for(int l = 0; l < 1000; l++)
+//                delayAvgArr[l] = 0;
+//            for(int l = 0; l < 1000; l++) {
+            cars.clear();
+            genPackets = 0;
+            deliPackets = 0;
+            packetDelays.clear();
+            for (int i = 0; i < noOfCars; i++) {
                 cars.add(new Vehicle());
                 genPackets++;
             }
             exit = false;
-            for(Integer i = 0; i < 4; i++) {
-                for(Integer j = 0 ; j < towers.get(i).length ; j++) {
+            for (Integer i = 0; i < 4; i++) {
+                for (Integer j = 0; j < towers.get(i).length; j++) {
                     Thread t = (new Thread(new App()));
                     t.setName(i.toString() + "," + j.toString());
                     t.start();
@@ -358,13 +366,18 @@ public class App implements Runnable {
                 // Notify all threads that its done
                 stop();
 
-            }
-            catch(InterruptedException e) {
+            } catch (InterruptedException e) {
 
             }
-            for(int i = 0; i < packetDelays.size(); i++) {
+            for (int i = 0; i < packetDelays.size(); i++) {
                 sumOfDelays += packetDelays.get(i);
             }
+//            delayAvgArr[l] = delayAvgArr[l]/deliPackets;
+////            }
+//            for(int l = 0; l < 1000; l++) {
+//                sumOfDelays += delayAvgArr[l];
+//            }
+//            sumOfDelays /= 1000;
             System.out.println(sumOfDelays/deliPackets);
             System.out.println(deliPackets);
             System.out.println(genPackets);
