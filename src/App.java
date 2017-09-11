@@ -223,7 +223,7 @@ public class App implements Runnable {
                 Random rand = new Random();
                 int carId = rand.nextInt(totalCarsWithinRange);
                 Vehicle car = carsWithinRange.get(carId);
-                Lock lock = car.getLock(); 
+                Lock lock = car.getLock();
                 if (lock.tryLock()) {
                     try {
                         if(distanceCT(car, tower) > 300) {            //If MultiHop
