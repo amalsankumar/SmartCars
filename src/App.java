@@ -1,6 +1,8 @@
 import java.util.*;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.Random;
+import java.util.UUID;
 
 public class App implements Runnable {
     
@@ -194,6 +196,8 @@ public class App implements Runnable {
         int roadId = Integer.parseInt(s[0]), towerId = Integer.parseInt(s[1]);
         RSU tower = towers.get(roadId)[towerId];
         List<Vehicle> carsWithinRange = new ArrayList<Vehicle>();
+        List<Vehicle> eligibleCars = new ArrayList<Vehicle>();
+        List<Vehicle> csmaCars = new ArrayList<Vehicle>();
         List<Vehicle> broadcastCars = new ArrayList<Vehicle>();
         while(!exit) {
             try {
@@ -202,10 +206,13 @@ public class App implements Runnable {
                 return;
             }
             carsWithinRange.clear();
+            eligibleCars.clear();
+            csmaCars.clear();
             for (int i = 0; i < noOfCars; i++) {
                 try {
                     Vehicle car = cars.get(i);
                     if (car.getRoadId() == Integer.parseInt(s[0]) && isWithinRangeCT(car, tower)) {
+
                         carsWithinRange.add(car);
                     }
                 } catch(Exception ex) {
@@ -213,7 +220,24 @@ public class App implements Runnable {
                 }
             }
             int totalCarsWithinRange = carsWithinRange.size();
-            if (totalCarsWithinRange == 0) {
+            for(int i = 0; i < totalCarsWithinRange; i++) {
+                if(carsWithinRange.get(i).getCsma() == 0) {
+                    eligibleCars.add(carsWithinRange.get(i));
+                    carsWithinRange.get(i).pushPacket((new Packet()));
+                    genPackets++;
+                }
+                else if(carsWithinRange.get(i).getCsma() > 0) {
+                    int temp = carsWithinRange.get(i).getCsma();
+                    carsWithinRange.get(i).setCsma(temp - 1);
+                    csmaCars.add(carsWithinRange.get(i));
+                }
+
+            }
+//            for(int i = 0; i < eligibleCars.size(); i++) {
+//                System.out.println(eligibleCars.get(i));
+//            }
+            int eligibleLen = eligibleCars.size();
+            if (eligibleLen == 0) {
                 try {
                     Thread.sleep(1000);
                 } catch (InterruptedException e) {
@@ -221,11 +245,17 @@ public class App implements Runnable {
                 }
             } else {
                 Random rand = new Random();
-                int carId = rand.nextInt(totalCarsWithinRange);
-                Vehicle car = carsWithinRange.get(carId);
+                int carId = rand.nextInt(eligibleLen);
+                Vehicle car = eligibleCars.get(carId);
+                for(int i = 0; i < eligibleCars.size(); i++) {
+//                    if(eligibleCars.get(i).getRoadId() != car.getRoadId()) {
+                        eligibleCars.get(i).setCsma(rand.nextInt(1014) + 10);
+//                    }
+                }
                 Lock lock = car.getLock();
                 if (lock.tryLock()) {
                     try {
+//                        car.setCsma(rand.nextInt(1014) + 10);
                         if(distanceCT(car, tower) > 300) {            //If MultiHop
                             broadcastCars.clear();
                             changeCarPosition();
@@ -288,6 +318,7 @@ public class App implements Runnable {
                     }
                 } else {
                     try {
+//                        car.setCsma(rand.nextInt(1014) + 10);
                         Thread.sleep(1000);
                     } catch (InterruptedException e) {
 
@@ -362,7 +393,7 @@ public class App implements Runnable {
                 }
             }
             try {
-                Thread.sleep(10000);
+                Thread.sleep(60000);
                 // Notify all threads that its done
                 stop();
 

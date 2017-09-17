@@ -12,6 +12,7 @@ public class Vehicle {
     private int speed;
     private int direction;
     private int roadId;
+    private int csma;
     private Position position;
     private long positionSetTime;
     private Queue<Packet> packetIdQueue = new LinkedList<Packet>();
@@ -64,6 +65,10 @@ public class Vehicle {
 
     public void setRoadId(int roadId) { this.roadId = roadId; }
 
+    public int getCsma() { return csma; }
+
+    public void setCsma(int csma) { this.csma = csma; }
+
     public long getPositionSetTime() { return positionSetTime ;}
 
     public Queue<Packet> getPacketQueue() { return packetIdQueue ;}
@@ -74,6 +79,7 @@ public class Vehicle {
         this.speed = (int)(Math.random() * 60) + 30;
         this.direction = rand.nextInt(2) * 2 - 1;
         this.roadId = rand.nextInt(4);
+        this.csma = 0;
         this.packetIdQueue.add(new Packet());
         position = new Position(this.roadId);
         positionSetTime = System.currentTimeMillis();
