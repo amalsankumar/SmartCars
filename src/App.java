@@ -8,7 +8,7 @@ public class App implements Runnable {
     
     //When all to find the positions of the vehicles and update them ? - DONE
     //Change speed of carSystem.out.println(sumOfDelays/deliPackets);
-    //create random packets in cars at certain time
+    //create random packets in cars at certain time - DONE
     //Get all the time from the List and make the avg delay - DONE
     //keep a count on the no of packets generated and delivered - DONE
     //if packet time is beyond 150s , drop it
@@ -20,9 +20,15 @@ public class App implements Runnable {
     private static List<Double> packetDelays = new ArrayList<Double>();
     private static int genPackets;
     private static int deliPackets;
-    private static int sumOfDelays;
+    private static long sumOfDelays;
+    private static int towerNum;
     private static double delayAvgArr[] = new double[1000];
     private Lock carsLock = new ReentrantLock();
+    private static List<Queue<Packet>> rsuBuffers = new ArrayList<Queue<Packet>>();       //The Queues for a pair of Towers
+    private static int bufferWeight[] = new int[16];
+    private static List<Queue<Packet>> rsuBackBuffers = new ArrayList<Queue<Packet>>();
+
+
 
     double distanceCT(Vehicle car, RSU tower) {
         float carX = car.getPosition().getX(), carY = car.getPosition().getY();
@@ -85,6 +91,7 @@ public class App implements Runnable {
     }
 
     void changeCarPosition() {
+
         for(int i = 0; i < noOfCars; i++) {
             Vehicle car = cars.get(i);
             long currentTime = System.currentTimeMillis();
@@ -197,8 +204,9 @@ public class App implements Runnable {
         RSU tower = towers.get(roadId)[towerId];
         List<Vehicle> carsWithinRange = new ArrayList<Vehicle>();
         List<Vehicle> eligibleCars = new ArrayList<Vehicle>();
-        List<Vehicle> csmaCars = new ArrayList<Vehicle>();
+//        List<Vehicle> csmaCars = new ArrayList<Vehicle>();
         List<Vehicle> broadcastCars = new ArrayList<Vehicle>();
+
         while(!exit) {
             try {
                 changeCarPosition();
@@ -207,12 +215,11 @@ public class App implements Runnable {
             }
             carsWithinRange.clear();
             eligibleCars.clear();
-            csmaCars.clear();
+//            csmaCars.clear();
             for (int i = 0; i < noOfCars; i++) {
                 try {
                     Vehicle car = cars.get(i);
                     if (car.getRoadId() == Integer.parseInt(s[0]) && isWithinRangeCT(car, tower)) {
-
                         carsWithinRange.add(car);
                     }
                 } catch(Exception ex) {
@@ -220,24 +227,25 @@ public class App implements Runnable {
                 }
             }
             int totalCarsWithinRange = carsWithinRange.size();
-            for(int i = 0; i < totalCarsWithinRange; i++) {
-                if(carsWithinRange.get(i).getCsma() == 0) {
-                    eligibleCars.add(carsWithinRange.get(i));
-                    carsWithinRange.get(i).pushPacket((new Packet()));
-                    genPackets++;
-                }
-                else if(carsWithinRange.get(i).getCsma() > 0) {
-                    int temp = carsWithinRange.get(i).getCsma();
-                    carsWithinRange.get(i).setCsma(temp - 1);
-                    csmaCars.add(carsWithinRange.get(i));
-                }
+//            for(int i = 0; i < totalCarsWithinRange; i++) {
+//                if(carsWithinRange.get(i).getCsma() == 0) {
+//                    eligibleCars.add(carsWithinRange.get(i));
+//                    carsWithinRange.get(i).pushPacket((new Packet()));
+//                    genPackets++;
 
-            }
+//                }
+//                else if(carsWithinRange.get(i).getCsma() > 0) {
+//                    int temp = carsWithinRange.get(i).getCsma();
+//                    carsWithinRange.get(i).setCsma(temp - 1);
+//                    csmaCars.add(carsWithinRange.get(i));
+//                }
+
+//            }
 //            for(int i = 0; i < eligibleCars.size(); i++) {
 //                System.out.println(eligibleCars.get(i));
 //            }
-            int eligibleLen = eligibleCars.size();
-            if (eligibleLen == 0) {
+//            int eligibleLen = eligibleCars.size();
+            if (totalCarsWithinRange == 0) {
                 try {
                     Thread.sleep(1000);
                 } catch (InterruptedException e) {
@@ -245,16 +253,29 @@ public class App implements Runnable {
                 }
             } else {
                 Random rand = new Random();
-                int carId = rand.nextInt(eligibleLen);
-                Vehicle car = eligibleCars.get(carId);
-                for(int i = 0; i < eligibleCars.size(); i++) {
+                int carId = rand.nextInt(totalCarsWithinRange);
+                Vehicle car = carsWithinRange.get(carId);
+//                for(int i = 0; i < eligibleCars.size(); i++) {
 //                    if(eligibleCars.get(i).getRoadId() != car.getRoadId()) {
-                        eligibleCars.get(i).setCsma(rand.nextInt(1014) + 10);
+//                        eligibleCars.get(i).setCsma(rand.nextInt(1014) + 10);
 //                    }
-                }
+//                }
                 Lock lock = car.getLock();
                 if (lock.tryLock()) {
                     try {
+                        Queue<Packet> rsuBuffer;
+                        Queue<Packet> backBuffer;
+                        int bufferIndex;
+                        if(tower.getTowerNum() % 2 == 0) {
+                            rsuBuffer = rsuBuffers.get(tower.getTowerNum()/2 - 1);
+                            bufferIndex = tower.getTowerNum()/2 - 1;
+                            backBuffer = rsuBackBuffers.get(tower.getTowerNum()/2 - 1);
+                        }
+                        else {
+                            rsuBuffer = rsuBuffers.get((tower.getTowerNum() + 1)/2 - 1);
+                            bufferIndex = (tower.getTowerNum() + 1)/2 - 1;
+                            backBuffer = rsuBackBuffers.get((tower.getTowerNum() + 1)/2 - 1);
+                        }
 //                        car.setCsma(rand.nextInt(1014) + 10);
                         if(distanceCT(car, tower) > 300) {            //If MultiHop
                             broadcastCars.clear();
@@ -286,12 +307,97 @@ public class App implements Runnable {
                         else {                                         //If no MultiHop
                             if (car.ifPacketQueueNotEmpty()) {
                                 Packet selectedPacket = car.getNextPacket();
-//                                System.out.println(deliPackets);
-                                deliPackets++;
-                                car.popPacket(car.getNextPacket());
-                                long deathTime = System.currentTimeMillis();
-                                selectedPacket.setTransTime((deathTime - selectedPacket.getpacketBirthTime()) + 2.66);
-                                packetDelays.add(selectedPacket.getTransTime());
+                                selectedPacket.setCheckTower(tower.getTowerNum());          //Assigning to which tower the packet is being pushed
+
+                                if(bufferWeight[bufferIndex] < 10000) {//if the primary buffer hasn't reached its storge limit yet
+//                                    if(bufferWeight[bufferIndex] + selectedPacket.getSize() < 10000) {
+                                        rsuBuffer.add(selectedPacket);
+                                        bufferWeight[bufferIndex] += selectedPacket.getSize();
+                                        car.popPacket(car.getNextPacket());
+//                                    }
+//                                    if (rsuBuffer.size() > 1) {
+//                                        if (rsuBuffer.peek().getCheckTower() == tower.getTowerNum()) {
+//                                            Packet currPacket = rsuBuffer.remove();
+//                                            bufferWeight[bufferIndex] -= currPacket.getSize();
+//                                            long deathTime = System.currentTimeMillis();
+//                                            if (deathTime - currPacket.getpacketBirthTime() < 150000) {          //Checking the TTL of the packet if above 150 or not
+//                                                currPacket.setTransTime((deathTime - currPacket.getpacketBirthTime()) + (currPacket.getSize() / (currPacket.getComputationReq() * 125)) + 2.66);
+//                                                packetDelays.add(currPacket.getTransTime());
+//                                                deliPackets++;
+//                                            }
+//                                        }
+//                                    }
+                                }
+
+                                else {
+                                    backBuffer.add(selectedPacket);
+                                    car.popPacket(car.getNextPacket());
+                                }
+
+                                if(rsuBuffer.size() != 0 && backBuffer.size() != 0) {
+                                    Packet p1 = rsuBuffer.peek();
+                                    Packet p2 = backBuffer.peek();
+                                    if (System.currentTimeMillis() - p1.getpacketBirthTime() > System.currentTimeMillis() - p2.getpacketBirthTime()) {
+                                        if (p1.getCheckTower() == tower.getTowerNum()) {
+                                            rsuBuffer.remove();
+                                            bufferWeight[bufferIndex] -= p1.getSize();
+                                            long deathTime = System.currentTimeMillis();
+                                            if (deathTime - p1.getpacketBirthTime() < 150000) {          //Checking the TTL of the packet if above 150 or not
+                                                p1.setTransTime((System.currentTimeMillis() - p1.getpacketBirthTime()) + ((p1.getSize() * 1000) / (p1.getComputationReq() * 125)) + 2.66);
+//                                                if(p1.getTransTime() < 150000) {
+                                                    packetDelays.add(p1.getTransTime());
+                                                    deliPackets++;
+//                                                }
+                                            }
+                                        } else if (p2.getCheckTower() == tower.getTowerNum()) {
+                                            backBuffer.remove();
+                                            long deathTime = System.currentTimeMillis();
+                                            if (deathTime - p2.getpacketBirthTime() < 150000) {          //Checking the TTL of the packet if above 150 or not
+                                                p2.setTransTime((System.currentTimeMillis() - p2.getpacketBirthTime()) + ((p2.getSize() * 1000) / (p2.getComputationReq() * 125)) + 2.66);
+//                                                if(p2.getTransTime() < 150000) {
+                                                    packetDelays.add(p2.getTransTime());
+                                                    deliPackets++;
+//                                                }
+                                            }
+                                        }
+                                    }
+
+                                }
+                                else if(backBuffer.size() == 0) {
+                                    if(rsuBuffer.size() > 1) {
+                                        if(rsuBuffer.peek().getCheckTower() == tower.getTowerNum()) {
+                                            Packet currPacket = rsuBuffer.remove();
+                                            bufferWeight[bufferIndex] -= currPacket.getSize();
+                                            long deathTime = System.currentTimeMillis();
+                                            if (deathTime - currPacket.getpacketBirthTime() < 150000) {
+                                                currPacket.setTransTime((System.currentTimeMillis() - currPacket.getpacketBirthTime()) + ((currPacket.getSize() * 1000) / (currPacket.getComputationReq() * 125)) + 2.66);
+//                                                if(currPacket.getTransTime() < 150000) {
+                                                    packetDelays.add(currPacket.getTransTime());
+                                                    deliPackets++;
+//                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                else if(rsuBuffer.size() == 0) {
+                                    if(backBuffer.peek().getCheckTower() == tower.getTowerNum()) {
+                                        Packet currPacket = backBuffer.remove();
+                                        long deathTime = System.currentTimeMillis();
+                                        if(deathTime - currPacket.getpacketBirthTime() < 150000) {
+                                            currPacket.setTransTime((System.currentTimeMillis() - currPacket.getpacketBirthTime()) + ((currPacket.getSize() * 1000) / (currPacket.getComputationReq() * 125)) + 2.66);
+//                                            if(currPacket.getTransTime() < 150000) {
+                                                packetDelays.add(currPacket.getTransTime());
+                                                deliPackets++;
+//                                            }
+                                        }
+                                    }
+                                }
+
+//                                deliPackets++;
+//                                car.popPacket(car.getNextPacket());
+//                                long deathTime = System.currentTimeMillis();
+//                                selectedPacket.setTransTime((deathTime - selectedPacket.getpacketBirthTime()) + 2.66);
+//                                packetDelays.add(selectedPacket.getTransTime());
                                 while(!carsLock.tryLock());
                                 try {
                                     for (int j = 0; j < noOfCars; j++) {
@@ -341,8 +447,9 @@ public class App implements Runnable {
         System.out.println(packet.getId() + "\n" + vehicle.getId());
         vehicle.pushPacket(packet);
         packet.setVehicleId(vehicle.getId());
+        towerNum = 1;
 
-        int p1 = 900, p2 = 900;
+        int p1 = 900, p2 = 900, p3 = 14100, p4 = 4500;
         for(int i = 0; i < 4; i++) {
             if(i % 2 == 0) {
                 towers.add(new RSU[12]);
@@ -351,32 +458,42 @@ public class App implements Runnable {
             }
             for(int j = 0 ; j < towers.get(i).length ; j++) {
                 if(i == 0) {
-                    towers.get(i)[j] = new RSU(p1, 0);
+                    towers.get(i)[j] = new RSU(p1, 0, towerNum);
                     p1 += 1200;
+                    towerNum++;
                 }
                 else if(i == 1) {
-                    towers.get(i)[j] = new RSU(15000, p2);
+                    towers.get(i)[j] = new RSU(15000, p2, towerNum);
                     p2 += 1200;
+                    towerNum++;
                 }
                 else if(i == 2) {
-                    p1 = 14100;
-                    towers.get(i)[j] = new RSU(p1, 5000);
-                    p1 -= 1200;
+                    towers.get(i)[j] = new RSU(p3, 5000, towerNum);
+                    p3 -= 1200;
+                    towerNum++;
                 }
                 else if(i == 3) {
-                    p2 = 4500;
-                    towers.get(i)[j] = new RSU(0, p2);
-                    p2 -= 1200;
+                    towers.get(i)[j] = new RSU(0, p4, towerNum);
+                    p4 -= 1200;
+                    towerNum++;
                 }
             }
         }
 
         for(int k = 0; k < 5; k++, noOfCars += 100) {
-//            sumOfDelays = 0;
-//            for(int l = 0; l < 1000; l++)
-//                delayAvgArr[l] = 0;
-//            for(int l = 0; l < 1000; l++) {
+            rsuBuffers.clear();     //Clearing the Tower Buffers
+            rsuBackBuffers.clear();
+            for(int i = 0; i < bufferWeight.length; i++) {
+                bufferWeight[i] = 0;                         //Clearing the weight array for each buffer
+            }
+            for(int i = 0; i < 16; i++) {
+                rsuBuffers.add(new LinkedList<Packet>());        //Adding 16 queues for the 32 towers
+            }
+            for(int i = 0; i < 16; i++) {
+                rsuBackBuffers.add(new LinkedList<Packet>());        //Adding 16 backup queues for the 32 towers
+            }
             cars.clear();
+            sumOfDelays = 0;
             genPackets = 0;
             deliPackets = 0;
             packetDelays.clear();
@@ -393,7 +510,7 @@ public class App implements Runnable {
                 }
             }
             try {
-                Thread.sleep(60000);
+                Thread.sleep(20000);
                 // Notify all threads that its done
                 stop();
 
@@ -409,7 +526,7 @@ public class App implements Runnable {
 //                sumOfDelays += delayAvgArr[l];
 //            }
 //            sumOfDelays /= 1000;
-            System.out.println(sumOfDelays/deliPackets);
+            System.out.println(sumOfDelays);
             System.out.println(deliPackets);
             System.out.println(genPackets);
         }

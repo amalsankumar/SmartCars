@@ -1,10 +1,9 @@
-
 public class RSU {
 
     private String vehicleId;
     private String packetId;
     private Position position;
-
+    private int towerNum;
     public String getVehicleId() {
         return vehicleId;
     }
@@ -22,9 +21,12 @@ public class RSU {
     public Position getPosition() {
         return position;
     }
+    public int getTowerNum() { return towerNum; }
 
-    public RSU(int x, int y) {
+    public RSU(int x, int y, int towerNum) {
+
         position = new Position(x, y);
+        this.towerNum = towerNum;
     }
 
 }
